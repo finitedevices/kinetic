@@ -38,7 +38,7 @@ typedef enum {
     KOP_CLRA    = 0b11100000,
     KOP_CLRB    = 0b11101000,
     KOP_CIF     = 0b11110000,
-    KOP_IF      = 0b11111000,
+    KOP_IF      = 0b11111000
 } KOp;
 
 typedef enum {
