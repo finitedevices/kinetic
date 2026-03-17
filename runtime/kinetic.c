@@ -35,15 +35,15 @@ void writeWord(Kinetic* vm, KWord addr, KWord word) {
 KWord getOperand(Kinetic* vm, KMode mode) {
     KWord word = 0;
 
-    if (mode == KMODE_LIT) {
+    if ((mode & 0x03) == KMODE_LIT) {
         word = mode & KMODE_WORD ? readWord(vm, vm->currentContext->ip++) : readByte(vm, vm->currentContext->ip++);
         if (mode & KMODE_WORD) vm->currentContext->ip++;
-    } else if (mode == KMODE_MEM) {
+    } else if ((mode & 0x03) == KMODE_MEM) {
         KWord addr = readByte(vm, vm->currentContext->ip++) | (readByte(vm, vm->currentContext->ip++) << 8);
         word = mode & KMODE_WORD ? readWord(vm, addr) : readByte(vm, addr);
-    } else if (mode == KMODE_A) {
+    } else if ((mode & 0x03) == KMODE_A) {
         word = vm->currentContext->a & (mode & KMODE_WORD ? 0xFFFF : 0xFF);
-    } else if (mode == KMODE_B) {
+    } else if ((mode & 0x03) == KMODE_B) {
         word = vm->currentContext->b & (mode & KMODE_WORD ? 0xFFFF : 0xFF);
     }
 
@@ -66,9 +66,10 @@ void handleInterrupt(Kinetic* vm, KWord code) {
         case KINT_SETUP:
             vm->protect.offset = readWord(vm, vm->main.a);
             vm->protect.limit = readWord(vm, vm->main.a + 2);
+            vm->protect.fuel = readWord(vm, vm->main.a + 4);
             return;
         case KINT_PROTECT:
-            vm->protect.fuel = vm->main.a;
+            vm->protect.a = vm->main.a;
             vm->currentContext = &vm->protect;
             return;
         case KINT_SAVE:
@@ -173,7 +174,7 @@ void kinetic_step(Kinetic* vm) {
             break;
         case KOP_MUL:
             multiplyResult = ctx->a * getOperand(vm, mode);
-            ctx->c = multiplyResult > -1;
+            ctx->c = !!(multiplyResult >> 16);
             ctx->a = multiplyResult;
             break;
         case KOP_OR:
@@ -181,7 +182,7 @@ void kinetic_step(Kinetic* vm) {
         case KOP_XOR:
             ctx->a ^= getOperand(vm, mode); break;
         case KOP_NOT:
-            ctx->a = !ctx->a;
+            ctx->a = !ctx->a; break;
         case KOP_NEQ:
             ctx->a = ctx->a != getOperand(vm, mode); break;
         case KOP_EQ:
@@ -218,5 +219,6 @@ void kinetic_step(Kinetic* vm) {
             ctx->a = 0; break;
         case KOP_CLRB:
             ctx->b = 0; break;
+        default: break;
     }
 }
