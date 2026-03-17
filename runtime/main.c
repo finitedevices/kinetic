@@ -17,7 +17,10 @@ void writeHandler(Kinetic* vm, KWord addr, KByte data) {
 KByte interruptHandler(Kinetic* vm, KWord code) {
     if (code == 0xFF) {
         printf("%c", vm->currentContext->a);
+        return 1;
     }
+
+    return 0;
 }
 
 int main(int argc, char* argv[]) {
