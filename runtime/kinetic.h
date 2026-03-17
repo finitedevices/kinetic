@@ -5,6 +5,7 @@
 
 typedef uint8_t KByte;
 typedef uint16_t KWord;
+typedef uint32_t KDWord;
 
 typedef enum {
     KOP_RET     = 0b00000000,
@@ -50,20 +51,30 @@ typedef enum {
     KMODE_WORD  = 0b100
 } KMode;
 
-typedef KByte (*KReadHandler)(KWord addr);
-typedef void (*KWriteHandler)(KWord addr, KByte data);
-typedef KByte (*KInterruptHandler)(KWord code);
+typedef enum {
+    KINT_EXIT       = 0x00,
+    KINT_SETUP      = 0x01,
+    KINT_PROTECT    = 0x02,
+    KINT_SAVE       = 0x03,
+    KINT_LOAD       = 0x04
+} KIntCode;
+
+struct Kinetic;
+
+typedef KByte (*KReadHandler)(struct Kinetic* vm, KWord addr);
+typedef void (*KWriteHandler)(struct Kinetic* vm, KWord addr, KByte data);
+typedef KByte (*KInterruptHandler)(struct Kinetic* vm, KWord code);
 
 typedef struct KineticContext {
-    KWord ip;   // Instruction pointer
-    KWord csp;  // Call stack pointer
-    KWord dsp;  // Data stack pointer
-    KWord isr;  // Interrupt service routine address
-    KWord a;    // A register
-    KWord b;    // B register
-    KByte c;    // Carry register
-    KWord offset;
-    KWord limit;
+    KWord ip;       // Instruction pointer
+    KWord csp;      // Call stack pointer
+    KWord dsp;      // Data stack pointer
+    KWord a;        // A register
+    KWord b;        // B register
+    KByte c;        // Carry register
+    KWord offset;   // Protected context code start
+    KWord limit;    // Protected context code end
+    KWord fuel;     // Protected context maximum run length
 } KineticContext;
 
 typedef struct Kinetic {
@@ -73,9 +84,12 @@ typedef struct Kinetic {
     KReadHandler readHandler;
     KWriteHandler writeHandler;
     KInterruptHandler interruptHandler;
+    void* metadata;
 } Kinetic;
 
 void kinetic_init(Kinetic* vm, KReadHandler readHandler, KWriteHandler writeHandler);
+void kinetic_push(Kinetic* vm, KMode mode, KWord value);
+KWord kinetic_pop(Kinetic* vm, KMode mode);
 void kinetic_step(Kinetic* vm);
 
 #endif

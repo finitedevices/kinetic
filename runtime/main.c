@@ -6,12 +6,18 @@
 Kinetic* vm;
 KByte mem[65536];
 
-KByte readHandler(KWord addr) {
+KByte readHandler(Kinetic* vm, KWord addr) {
     return mem[addr];
 }
 
-void writeHandler(KWord addr, KByte data) {
+void writeHandler(Kinetic* vm, KWord addr, KByte data) {
     mem[addr] = data;
+}
+
+KByte interruptHandler(Kinetic* vm, KWord code) {
+    if (code == 0xFF) {
+        printf("%c", vm->currentContext->a);
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -50,10 +56,10 @@ int main(int argc, char* argv[]) {
 
     kinetic_init(&vm, readHandler, writeHandler);
 
+    vm.interruptHandler = interruptHandler;
+
     while (1) {
         kinetic_step(&vm);
-
-        printf("IP = %04x A = %04x\n", vm.currentContext->ip, vm.currentContext->a);
     }
 
     return 0;

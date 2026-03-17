@@ -2,9 +2,9 @@
 
 void kinetic_init(Kinetic* vm, KReadHandler readHandler, KWriteHandler writeHandler) {
     vm->main = vm->protect = (KineticContext) {
-        .ip = 0, .csp = 0, .dsp = 0, .isr = 0,
+        .ip = 0, .csp = 0, .dsp = 0,
         .a = 0, .b = 0, .c = 0,
-        .offset = 0, .limit = -1
+        .offset = 0, .limit = -1, .fuel = 0
     };
 
     vm->currentContext = &vm->main;
@@ -15,12 +15,12 @@ void kinetic_init(Kinetic* vm, KReadHandler readHandler, KWriteHandler writeHand
 
 KByte readByte(Kinetic* vm, KWord addr) {
     if (addr >= vm->currentContext->limit) return 0;
-    return vm->readHandler(addr + vm->currentContext->offset);
+    return vm->readHandler(vm, addr + vm->currentContext->offset);
 }
 
 void writeByte(Kinetic* vm, KWord addr, KByte data) {
     if (addr >= vm->currentContext->limit) return;
-    vm->writeHandler(addr + vm->currentContext->offset, data);
+    vm->writeHandler(vm, addr + vm->currentContext->offset, data);
 }
 
 KWord readWord(Kinetic* vm, KWord addr) {
@@ -50,30 +50,100 @@ KWord getOperand(Kinetic* vm, KMode mode) {
     return word;
 }
 
+void handleInterrupt(Kinetic* vm, KWord code) {
+    if (vm->currentContext == &vm->protect) {
+        vm->currentContext = &vm->main;
+        vm->main.a = vm->protect.a;
+        vm->main.b = code;
+        return;
+    }
+
+    if (vm->interruptHandler && vm->interruptHandler(vm, code)) {
+        return;
+    }
+
+    switch (code) {
+        case KINT_SETUP:
+            vm->protect.offset = readWord(vm, vm->main.a);
+            vm->protect.limit = readWord(vm, vm->main.a + 2);
+            return;
+        case KINT_PROTECT:
+            vm->protect.fuel = vm->main.a;
+            vm->currentContext = &vm->protect;
+            return;
+        case KINT_SAVE:
+            writeWord(vm, vm->main.a, vm->protect.ip);
+            writeWord(vm, vm->main.a + 2, vm->protect.csp);
+            writeWord(vm, vm->main.a + 4, vm->protect.dsp);
+            writeWord(vm, vm->main.a + 6, vm->protect.a);
+            writeWord(vm, vm->main.a + 8, vm->protect.b);
+            writeByte(vm, vm->main.a + 10, vm->protect.c);
+            writeWord(vm, vm->main.a + 12, vm->protect.fuel);
+            return;
+        case KINT_LOAD:
+            vm->protect.ip = readWord(vm, vm->main.a);
+            vm->protect.csp = readWord(vm, vm->main.a + 2);
+            vm->protect.dsp = readWord(vm, vm->main.a + 4);
+            vm->protect.a = readWord(vm, vm->main.a + 6);
+            vm->protect.b = readWord(vm, vm->main.a + 8);
+            vm->protect.c = readByte(vm, vm->main.a + 10);
+            vm->protect.fuel = readWord(vm, vm->main.a + 12);
+            return;
+        default: break;
+    }
+}
+
+void kinetic_push(Kinetic* vm, KMode mode, KWord value) {
+    KineticContext* ctx = vm->currentContext;
+
+    ctx->dsp--;
+
+    if (mode & KMODE_WORD) {
+        ctx->dsp--;
+        writeWord(vm, ctx->dsp, value);
+    } else {
+        writeByte(vm, ctx->dsp, value);
+    }
+}
+
+KWord kinetic_pop(Kinetic* vm, KMode mode) {
+    KineticContext* ctx = vm->currentContext;
+    KWord result = mode & KMODE_WORD ? readWord(vm, ctx->dsp) : readByte(vm, ctx->dsp);
+    ctx->dsp++;
+    if (mode & KMODE_WORD) ctx->dsp++;
+    return result;
+}
+
 void kinetic_step(Kinetic* vm) {
     KineticContext* ctx = vm->currentContext;
     KByte instr = readByte(vm, ctx->ip++);
     KByte opcode = instr & 0xF8, mode = instr & 0x07;
-    KWord operand, addr;
+    KWord result, operand, addr;
+    KDWord multiplyResult;
+
+    if (vm->currentContext == &vm->protect && vm->protect.fuel == 0) {
+        vm->currentContext = &vm->main;
+        vm->main.a = 0;
+        vm->main.b = 2;
+        return;
+    }
+
+    if (vm->protect.fuel > 0) {
+        vm->protect.fuel--;
+    }
 
     switch (opcode) {
         case KOP_RET:
             ctx->ip = readWord(vm, ctx->csp); ctx->csp += 2; break;
         case KOP_POP:
-            ctx->a = mode & KMODE_WORD ? readWord(vm, ctx->dsp) : readByte(vm, ctx->dsp);
-            ctx->dsp++;
-            if (mode & KMODE_WORD) ctx->dsp++;
-            break;
+            ctx->a = kinetic_pop(vm, mode); break;
         case KOP_MOD:
             operand = getOperand(vm, mode);
             if (operand == 0) ctx->a = 0;
             else ctx->a %= operand;
             break;
         case KOP_PUSH:
-            ctx->dsp--;
-            if (mode & KMODE_WORD) ctx->dsp--;
-            writeWord(vm, ctx->dsp, getOperand(vm, mode));
-            break;
+            kinetic_push(vm, mode, getOperand(vm, mode)); break;
         case KOP_LDA:
             ctx->a = getOperand(vm, mode); break;
         case KOP_LDB:
@@ -87,16 +157,25 @@ void kinetic_step(Kinetic* vm) {
             else writeByte(vm, getOperand(vm, mode), ctx->b);
             break;
         case KOP_SUB:
-            ctx->a -= getOperand(vm, mode); break;
+            operand = getOperand(vm, mode);
+            ctx->c = ctx->a < operand;
+            ctx->a -= operand;
+            break;
         case KOP_ADD:
-            ctx->a += getOperand(vm, mode); break;
+            result = ctx->a + getOperand(vm, mode);
+            ctx->c = result < ctx->a;
+            ctx->a = result;
+            break;
         case KOP_DIV:
             operand = getOperand(vm, mode);
             if (operand == 0) ctx->a = 0;
             else ctx->a /= operand;
             break;
         case KOP_MUL:
-            ctx->a *= getOperand(vm, mode); break;
+            multiplyResult = ctx->a * getOperand(vm, mode);
+            ctx->c = multiplyResult > -1;
+            ctx->a = multiplyResult;
+            break;
         case KOP_OR:
             ctx->a |= getOperand(vm, mode); break;
         case KOP_XOR:
@@ -132,11 +211,9 @@ void kinetic_step(Kinetic* vm) {
             ctx->ip = addr;
             break;
         case KOP_STCB:
-            // TODO: Implement
-            break;
+            ctx->a = ctx->c; break;
         case KOP_INT:
-            // TODO: Implement
-            break;
+            handleInterrupt(vm, getOperand(vm, mode)); break;
         case KOP_CLRA:
             ctx->a = 0; break;
         case KOP_CLRB:
