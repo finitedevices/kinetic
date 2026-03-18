@@ -193,6 +193,7 @@ void kinetic_step(Kinetic* vm) {
             ctx->a >>= getOperand(vm, mode); break;
         case KOP_DEC:
             ctx->a--; break;
+            // TODO: Store bit shift carry
         case KOP_LTN:
             ctx->a = ctx->a < getOperand(vm, mode); break;
         case KOP_BSL:
