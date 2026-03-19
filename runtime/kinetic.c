@@ -138,13 +138,12 @@ void kinetic_step(Kinetic* vm) {
             ctx->ip = readWord(vm, ctx->csp); ctx->csp += 2; break;
         case KOP_POP:
             ctx->a = kinetic_pop(vm, mode); break;
-        case KOP_MOD:
-            operand = getOperand(vm, mode);
-            if (operand == 0) ctx->a = 0;
-            else ctx->a %= operand;
-            break;
         case KOP_PUSH:
             kinetic_push(vm, mode, getOperand(vm, mode)); break;
+        case KOP_IDXA:
+            ctx->a += getOperand(vm, mode);
+            ctx->a = readWord(vm, ctx->a);
+            break;
         case KOP_LDA:
             ctx->a = getOperand(vm, mode); break;
         case KOP_LDB:
@@ -183,10 +182,13 @@ void kinetic_step(Kinetic* vm) {
             ctx->a ^= getOperand(vm, mode); break;
         case KOP_NOT:
             ctx->a = !ctx->a; break;
-        case KOP_NEQ:
-            ctx->a = ctx->a != getOperand(vm, mode); break;
         case KOP_EQ:
             ctx->a = ctx->a == getOperand(vm, mode); break;
+        case KOP_MOD:
+            operand = getOperand(vm, mode);
+            if (operand == 0) ctx->a = 0;
+            else ctx->a %= operand;
+            break;
         case KOP_GTN:
             ctx->a = ctx->a > getOperand(vm, mode); break;
         case KOP_BSR:
