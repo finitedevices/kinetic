@@ -149,12 +149,12 @@ void kinetic_step(Kinetic* vm) {
         case KOP_LDB:
             ctx->b = getOperand(vm, mode); break;
         case KOP_STA:
-            if (mode & KMODE_WORD) writeWord(vm, getOperand(vm, mode), ctx->a);
-            else writeByte(vm, getOperand(vm, mode), ctx->a);
+            if (mode & KMODE_WORD) writeWord(vm, getOperand(vm, mode | KMODE_WORD), ctx->a);
+            else writeByte(vm, getOperand(vm, mode | KMODE_WORD), ctx->a);
             break;
         case KOP_STB:
-            if (mode & KMODE_WORD) writeWord(vm, getOperand(vm, mode), ctx->b);
-            else writeByte(vm, getOperand(vm, mode), ctx->b);
+            if (mode & KMODE_WORD) writeWord(vm, getOperand(vm, mode | KMODE_WORD), ctx->b);
+            else writeByte(vm, getOperand(vm, mode | KMODE_WORD), ctx->b);
             break;
         case KOP_SUB:
             operand = getOperand(vm, mode);
@@ -209,13 +209,13 @@ void kinetic_step(Kinetic* vm) {
         case KOP_INC:
             ctx->a++; break;
         case KOP_IF:
-            if (!ctx->a) break; // Fall through if true
+            if (!ctx->a) {ctx->ip += 2; break;} // Fall through if true
         case KOP_JUMP:
-            ctx->ip = getOperand(vm, mode); break;
+            ctx->ip = getOperand(vm, mode | KMODE_WORD); break;
         case KOP_CIF:
-            if (!ctx->a) break; // Fall through if true
+            if (!ctx->a) {ctx->ip += 2; break;} // Fall through if true
         case KOP_CALL:
-            addr = getOperand(vm, mode);
+            addr = getOperand(vm, mode | KMODE_WORD);
             ctx->csp -= 2;
             writeWord(vm, ctx->csp, ctx->ip);
             ctx->ip = addr;

@@ -35,12 +35,16 @@ const opcodes = {
     IF:     0b11111000
 };
 
-var bareInstructions = ["RET", "POP", "NOT", "DEC", "INC"];
+const bareInstructions = ["RET", "POP", "NOT", "DEC", "INC"];
+const addressingInstructions = ["STA", "STB", "JUMP", "CALL", "CIF", "IF"];
 
 var args = [...Deno.args];
 var inputPath = null;
 var outputPath = null;
 var bytes = [];
+var constants = {};
+var rewrites = [];
+var applyingRewrites = false;
 var currentPath = null;
 var currentLine = 0;
 
@@ -50,7 +54,7 @@ function die(message) {
     Deno.exit(1);
 }
 
-function parseValue(part, word = false) {
+function parseInteger(part) {
     if (!part) {
         die("No value specified");
     }
@@ -58,32 +62,84 @@ function parseValue(part, word = false) {
     var match;
 
     if (match = part.match(/^(\d+)$/)) {
-        var int = parseInt(match);
-
-        if (word) {
-            if (int > 0xFFFF) {
-                die("Value too large to fit in word");
-            }
-
-            return [int & 0xFF, (int & 0xFF00) >> 8];
-        } else {
-            if (int > 0xFF) {
-                die("Value too large to fit in byte");
-            }
-
-            return [int];
-        }
+        return parseInt(match);
+    }
+    
+    if (match = part.match(/^\$([0-9a-fA-F][0-9a-fA-F]{1,4})$/)) {
+        return parseInt(match[1], 16);
     }
 
-    if (word && (match = part.match(/^\$([0-9a-fA-F]{1,2})([0-9a-fA-F]{2})$/))) {
-        return [parseInt(match[2], 16), parseInt(match[1], 16)];
-    }
-
-    if (match = part.match(/^\$([0-9a-fA-F]{1,2})$/)) {
-        return word ? [parseInt(match[1], 16), 0] : [parseInt(match[1], 16)];
+    if (match = part.match(/^%(.)$/)) {
+        return match[1].charCodeAt(0);
     }
 
     die("Syntax error");
+}
+
+function evaluateExpression(expression, generating = false, word = false) {
+    var value = null;
+    var operators = expression.match(/[+-]/g);
+
+    for (var part of expression.split(/[+-]/g)) {
+        var match;
+        var partValue;
+
+        if (match = part.match(/^[a-zA-Z_][a-zA-Z0-9_.]*$/)) {
+            var identifier = match[0];
+
+            if (constants.hasOwnProperty(identifier)) {
+                partValue = constants[identifier];
+            } else {
+                if (applyingRewrites || !generating) {
+                    die(`Unknown identifier: ${identifier}`);
+                }
+
+                rewrites.push({position: bytes.length, expression, word});
+
+                return 0;
+            }
+        } else {
+            partValue = parseInteger(part);
+        }
+
+        if (value == null) {
+            value = partValue;
+        } else {
+            if (operators[0] == "-") {
+                value -= partValue;
+            } else {
+                value += partValue;
+            }
+
+            operators.shift();
+        }
+    }
+
+    return value;
+}
+
+function generateExpression(expression, word = false) {
+    var value = evaluateExpression(expression, true, word);
+
+    if (!word && value > 0xFF) {
+        die("Value too large to fit in byte");
+    } else if (value > 0xFFFF) {
+        die("Value too large to fit in word");
+    }
+
+    return word ? [value & 0xFF, (value & 0xFF00) << 8] : [value & 0xFF];
+}
+
+function applyRewrites() {
+    applyingRewrites = true;
+
+    for (var rewrite of rewrites) {
+        var result = generateExpression(rewrite.expression, rewrite.word);
+
+        for (var i = 0; i < result.length; i++) {
+            bytes[rewrite.position + i] = result[i];
+        }
+    }
 }
 
 function parseCode(path, code) {
@@ -96,6 +152,7 @@ function parseCode(path, code) {
         currentPath = path;
         currentLine = currentLocalLine;
 
+        var match;
         var parts = line.split(";")[0].trim().split(/\s+/g);
 
         if (parts.join("") == "") {
@@ -103,12 +160,22 @@ function parseCode(path, code) {
         }
 
         if (parts[0].toLowerCase() == ".byte") {
-            bytes.push(...parseValue(parts[1]));
+            bytes.push(...generateExpression(parts[1]));
             continue;
         }
 
         if (parts[0].toLowerCase() == ".word") {
-            bytes.push(...parseValue(parts[1], true));
+            bytes.push(...generateExpression(parts[1], true));
+            continue;
+        }
+
+        if (parts[0].match(/^[a-zA-Z_][a-zA-Z0-9_.]*$/) && parts[1] == "=") {
+            constants[parts[0]] = evaluateExpression(parts[2]);
+            continue;
+        }
+
+        if (match = parts[0].match(/^([a-zA-Z_][a-zA-Z0-9_.]*):$/)) {
+            constants[match[1]] = bytes.length;
             continue;
         }
 
@@ -117,6 +184,7 @@ function parseCode(path, code) {
 
             if (instructionPart.replace(/[wW]$/, "") == mnemonic) {
                 var instruction = opcodes[mnemonic];
+                var isAddressingInstruction = addressingInstructions.includes(mnemonic);
                 var wordMode = instructionPart.toUpperCase().endsWith("W");
 
                 if (wordMode) {
@@ -132,13 +200,10 @@ function parseCode(path, code) {
                         bytes.push(instruction | 0b011);
                     } else if (parts[1]?.startsWith("*")) {
                         bytes.push(instruction | 0b001);
-                        bytes.push(...parseValue(parts[1].substring(1), true));
-                    } else if (wordMode) {
-                        bytes.push(instruction);
-                        bytes.push(...parseValue(parts[1], true));
+                        bytes.push(...generateExpression(parts[1].substring(1), true));
                     } else {
                         bytes.push(instruction);
-                        bytes.push(...parseValue(parts[1]));
+                        bytes.push(...generateExpression(parts[1], wordMode | isAddressingInstruction));
                     }
                 }
 
@@ -185,5 +250,6 @@ try {
 }
 
 parseCode(inputPath, inputFile);
+applyRewrites();
 
 await Deno.writeFile(outputPath, new Uint8Array(bytes));
