@@ -197,6 +197,7 @@ void kinetic_step(Kinetic* vm) {
             ctx->a >>= operand;
             break;
         case KOP_DEC:
+            // TODO: Allow incrementation and decrementation of B and memory
             ctx->a--; break;
         case KOP_LTN:
             ctx->a = ctx->a < getOperand(vm, mode); break;
