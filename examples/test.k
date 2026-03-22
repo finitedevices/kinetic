@@ -1,7 +1,7 @@
 STEP = 1
 
 start:
-	; Set initial value in B
+	; Set initial value in B to ASCII A
 	ldb	%A
 
 loop:
@@ -13,7 +13,7 @@ loop:
 	add	STEP
 	ldb	a
 
-	; Check if B is at end of alphabet
+	; Check if B ASCII code is at Z
 	lda	b
 	eq	%Z+1
 	if	end
