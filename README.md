@@ -4,7 +4,7 @@ A simple 16-bit VM-based runtime architecture designed for ease of portability.
 ## Instruction set summary
 Instructions are variable in length (depending on the operand mode), but the first byte contains the opcode and the operand mode, and the subsequent bytes contain either the operand (in the case of _literal_ mode) or the address of the operand value to use in memory (in the case of _memory_ mode). When using a register as an operand (_register_ mode), then the instruction will only be one byte long, as the operand mode specifies which register (A or B) to use.
 
-Most significant 5 bits of first byte:
+The most significant 5 bits of first byte specify the opcode:
 
 | Opcode  | Mnem.  | Opcode  | Mnem.  | Opcode  | Mnem.  | Opcode  | Mnem.  |
 |---------|--------|---------|--------|---------|--------|---------|--------|
@@ -17,7 +17,7 @@ Most significant 5 bits of first byte:
 | `00110` | `sta`  | `01110` | `and`  | `10110` | `bsl`  | `11110` | `cif`  |
 | `00111` | `stb`  | `01111` | `not`  | `10111` | `inc`  | `11111` | `if`   |
 
-Least significant 3 bits of first byte:
+The least significant 3 bits of first byte specify the operand mode:
 
 | Mode  | Operand interpretation                                   |
 |-------|----------------------------------------------------------|
