@@ -19,7 +19,7 @@ The most significant 5 bits of the instruction's first byte specify the opcode:
 
 The least significant 3 bits of the instruction's first byte specify the operand mode:
 
-| Mode  | Operand interpretation                                   |
+| Mode  | Operand description                                      |
 |-------|----------------------------------------------------------|
 | `000` | Read next byte as literal                                |
 | `001` | Read next word as memory address to read as byte operand |
