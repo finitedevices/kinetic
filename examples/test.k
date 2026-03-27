@@ -18,7 +18,7 @@ loop:
 	eq	%Z+1
 	if	end
 
-	; Loop back to start
+	; If not, loop back to start
 	jump	loop
 
 end:
