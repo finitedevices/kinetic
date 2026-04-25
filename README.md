@@ -2,7 +2,7 @@
 A simple 16-bit VM-based runtime architecture designed for ease of portability.
 
 ## Instruction set summary
-Instructions are variable in byte length (depending on the operand mode), but the first byte contains the opcode and the operand mode, and the subsequent bytes contain either the operand (in the case of _literal_ mode) or the address of the operand value to use in memory (in the case of _memory_ mode). When using a register as an operand (_register_ mode), then the instruction will only be one byte long, as the operand mode specifies which register (A or B) to use.
+Instructions are variable in byte length (depending on the operand mode), with the first byte containing the opcode and the operand mode, and subsequent bytes containing either the operand (in the case of _literal_ mode) or the address of the operand value to use in memory (in the case of _memory_ mode). When using a register as an operand (_register_ mode), then the instruction will only be one byte long, as the operand mode specifies which register (A or B) to use.
 
 The most significant 5 bits of the instruction's first byte specify the opcode:
 
