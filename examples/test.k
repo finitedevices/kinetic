@@ -22,7 +22,7 @@ loop:
 	jump	loop
 
 end:
-	; Print newline
+	; Print newline character
 	lda	10
 	int	$FF
 
